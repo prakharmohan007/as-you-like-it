@@ -1,6 +1,7 @@
 # as-you-like-it
-Step 1. Fetch the data from [ratings](https://github.com/zygmuntz/goodbooks-10k/blob/master/ratings.csv)
+Step 1. Fetch the data from [ratings](https://github.com/zygmuntz/goodbooks-10k/blob/master/ratings.csv).
 The ratings data look like this:
+
 user_id,book_id,rating
 1,258,5
 2,4081,4
