@@ -5,9 +5,13 @@ The ratings data look like this:
 user\_id,book\_id,rating
 
 1,258,5
+
 2,4081,4
+
 2,260,5
+
 2,9296,5
+
 2,2318,3
 
 Ratings go from one to five. Both book IDs and user IDs are contiguous. For books, they are 1-10000, for users, 1-53424.
