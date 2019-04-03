@@ -1,0 +1,8 @@
+# These files/folders will not be included in guthub
+
+# swap files
+*.swp
+
+# folders
+data
+results
