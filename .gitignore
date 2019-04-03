@@ -1,0 +1,8 @@
+# These files will be ignore bu GIT
+
+# swap files
+*.swap
+
+# folders
+data
+results
