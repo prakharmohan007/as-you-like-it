@@ -5,6 +5,21 @@ import csv
 import os
 import argparse
 
+def get_rating_freq(data, column):
+    freq = {}
+    # np_data = np.array(user_freq)
+    # num_unique_users = np.unique(np_data[:,0]).shape[0]
+
+    for row in data:
+        if row[column] in freq:
+            freq[row[column]] += 1
+        else:
+            freq[row[column]] = 1
+    
+    top_keys = sorted(freq, key = freq.get, reverse=True)
+    # print(top_keys)
+    return top_keys
+
 def create_subdata(num_user = 2000, num_item = 2000, path = "./data"):
     try:
         if not os.path.exists(path):
@@ -13,24 +28,55 @@ def create_subdata(num_user = 2000, num_item = 2000, path = "./data"):
         print ("Error with directory ", path, ". Error message: ", err)
         path = "./"
     
+    # READ DATA
+    data = []
     with open('./goodbooks-10k/ratings.csv') as csv_file:
         csv_reader = csv.reader(csv_file)
-        data = []  # list(csv_reader)
-        head = 0
-        for row in csv_reader:
-            # print(data)
-            if head == 0:
-                head = 1
-                continue
+        data = list(csv_reader)
+        del data[0]
+    print("CHECK: number of samples: ", len(data))
+    data = [list( map(int,i) ) for i in data]
+
+    # Get users with most number of ratings
+    freq_users = get_rating_freq(data,0)
+
+    # select top num_users number of users
+    top_users_list = freq_users[:num_users]
+    top_users = set(top_users_list)
+    print("CHECK: number of top users: ",len(top_users))
+    # print(top_users)
+
+    # filter the data based to top users
+    intermediate_data = []
+    for row in data:
+        if row[0] in top_users:
+            # print(row)
+            intermediate_data.append(row)
+    print("CHECK: Number of samples after filtering: ", len(intermediate_data))
     
-            if int(row[0]) <= num_users and int(row[1]) <= num_items:
-                data.append(row)
-                # print(row)
+    # get books with most number of ratings by above filtered users
+    freq_book = get_rating_freq(intermediate_data,1)
+
+    # select top num_items number of items
+    top_books_list = freq_book[:num_items]
+    top_books = set(top_books_list)
+    print("CHECK: number of top rated books: ", len(top_books))
+    # print(top_books)
+
+    # filter data again
+    sub_data = []
+    for row in intermediate_data:
+        if row[1] in top_books:
+            # print(row)
+            sub_data.append(row)
+    print("CHECK: number of samples: ", len(sub_data))
     
+    # save as csv file
+    sub_data = [list( map(str,i) ) for i in sub_data]
     filepath = path+"/ratings_"+str(num_users)+"_"+str(num_items)+".csv"
     with open(filepath, 'w') as csv_file:
         csv_writer = csv.writer(csv_file)
-        for row in data:
+        for row in sub_data:
             csv_writer.writerow(row)
     
     # print("completed!")
