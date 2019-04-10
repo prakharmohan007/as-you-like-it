@@ -33,7 +33,9 @@ def create_subdata(num_user = 2000, num_item = 2000, path = "./data"):
     with open('./goodbooks-10k/ratings.csv') as csv_file:
         csv_reader = csv.reader(csv_file)
         data = list(csv_reader)
-        del data[0]
+    
+    header = data[0]
+    del data[0]
     print("CHECK: number of samples: ", len(data))
     data = [list( map(int,i) ) for i in data]
 
@@ -45,6 +47,13 @@ def create_subdata(num_user = 2000, num_item = 2000, path = "./data"):
     top_users = set(top_users_list)
     print("CHECK: number of top users: ",len(top_users))
     # print(top_users)
+ 
+    # adjust user-ids to 0:num_users
+    uid_map = {}
+    uid = 0
+    for u in top_users_list:
+        uid_map[u] = uid
+        uid += 1
 
     # filter the data based to top users
     intermediate_data = []
@@ -63,6 +72,13 @@ def create_subdata(num_user = 2000, num_item = 2000, path = "./data"):
     print("CHECK: number of top rated books: ", len(top_books))
     # print(top_books)
 
+    # adjust book ids to 0:num_items
+    bid_map = {}
+    bid = 0
+    for b in top_books_list:
+        bid_map[b] = bid
+        bid += 1
+
     # filter data again
     sub_data = []
     for row in intermediate_data:
@@ -70,14 +86,18 @@ def create_subdata(num_user = 2000, num_item = 2000, path = "./data"):
             # print(row)
             sub_data.append(row)
     print("CHECK: number of samples: ", len(sub_data))
-    
+
     # save as csv file
-    sub_data = [list( map(str,i) ) for i in sub_data]
+    # sub_data = [list( map(str,i) ) for i in sub_data]
     filepath = path+"/ratings_"+str(num_users)+"_"+str(num_items)+".csv"
     with open(filepath, 'w') as csv_file:
         csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(header)
         for row in sub_data:
-            csv_writer.writerow(row)
+            user = uid_map[row[0]]
+            book = bid_map[row[1]]
+            row_ = [str(user), str(book), str(row[2])]
+            csv_writer.writerow(row_)
     
     # print("completed!")
 

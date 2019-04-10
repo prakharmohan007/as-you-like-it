@@ -2,6 +2,8 @@
 
 # swap files
 *.swp
+*.swn
+*.swo
 
 # folders
 data
