@@ -16,9 +16,10 @@ def get_rating_freq(data, column):
         else:
             freq[row[column]] = 1
     
-    top_keys = sorted(freq, key = freq.get, reverse=True)
+    # top_keys = sorted(freq, key = freq.get, reverse=True)
     # print(top_keys)
-    return top_keys
+    # return top_keys
+    return freq
 
 def create_subdata(num_user = 2000, num_item = 2000, path = "./data"):
     try:
@@ -27,6 +28,8 @@ def create_subdata(num_user = 2000, num_item = 2000, path = "./data"):
     except OSError as er:
         print ("Error with directory ", path, ". Error message: ", err)
         path = "./"
+   
+    book_rating_th = 4
     
     # READ DATA
     data = []
@@ -41,19 +44,19 @@ def create_subdata(num_user = 2000, num_item = 2000, path = "./data"):
 
     # Get users with most number of ratings
     freq_users = get_rating_freq(data,0)
-
+    sorted_user_freq = sorted(freq_users, key = freq_users.get, reverse=True)
     # select top num_users number of users
-    top_users_list = freq_users[:num_users]
+    top_users_list = sorted_user_freq[:num_users]
     top_users = set(top_users_list)
     print("CHECK: number of top users: ",len(top_users))
     # print(top_users)
  
     # adjust user-ids to 0:num_users
-    uid_map = {}
-    uid = 0
-    for u in top_users_list:
-        uid_map[u] = uid
-        uid += 1
+    # uid_map = {}
+    # uid = 0
+    # for u in top_users_list:
+    #     uid_map[u] = uid
+    #     uid += 1
 
     # filter the data based to top users
     intermediate_data = []
@@ -65,19 +68,21 @@ def create_subdata(num_user = 2000, num_item = 2000, path = "./data"):
     
     # get books with most number of ratings by above filtered users
     freq_book = get_rating_freq(intermediate_data,1)
-
+    atleast_two_rating = dict(filter(lambda x: (x[1]) > book_rating_th, freq_book.items()))
+    sorted_book_freq = sorted(atleast_two_rating, key = atleast_two_rating.get, reverse=True)
+    # books = list(atleast_two_books.keys())
     # select top num_items number of items
-    top_books_list = freq_book[:num_items]
+    top_books_list = sorted_book_freq[:num_items]
     top_books = set(top_books_list)
     print("CHECK: number of top rated books: ", len(top_books))
     # print(top_books)
 
     # adjust book ids to 0:num_items
-    bid_map = {}
-    bid = 0
-    for b in top_books_list:
-        bid_map[b] = bid
-        bid += 1
+    # bid_map = {}
+    # bid = 0
+    # for b in top_books_list:
+    #     bid_map[b] = bid
+    #     bid += 1
 
     # filter data again
     sub_data = []
@@ -87,17 +92,20 @@ def create_subdata(num_user = 2000, num_item = 2000, path = "./data"):
             sub_data.append(row)
     print("CHECK: number of samples: ", len(sub_data))
 
+    numi = min(num_items, len(top_books))
+    numu = min(num_users, len(top_users))
+
     # save as csv file
     # sub_data = [list( map(str,i) ) for i in sub_data]
-    filepath = path+"/ratings_"+str(num_users)+"_"+str(num_items)+".csv"
+    filepath = path+"/ratings_"+str(numu)+"_"+str(numi)+"_"+str(book_rating_th+1)+".csv"
     with open(filepath, 'w') as csv_file:
         csv_writer = csv.writer(csv_file)
         csv_writer.writerow(header)
         for row in sub_data:
-            user = uid_map[row[0]]
-            book = bid_map[row[1]]
-            row_ = [str(user), str(book), str(row[2])]
-            csv_writer.writerow(row_)
+            # user = uid_map[row[0]]
+            # book = bid_map[row[1]]
+            # row_ = [str(user), str(book), str(row[2])]
+            csv_writer.writerow(row)
     
     # print("completed!")
 
