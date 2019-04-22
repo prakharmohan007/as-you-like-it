@@ -1,8 +1,10 @@
 # These files will be ignore bu GIT
 
 # swap files
-*.swap
+*.sw*
 
 # folders
 data
 results
+goodbooks-10k
+.idea
