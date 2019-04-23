@@ -12,10 +12,11 @@ class CombinedCollaborativeFiltering:
         self.ratings = np.zeros((num_users, num_items))  # num_users x num_items
         self.train_ratings = []
         self.test_ratings = []
-        self.user_idx = {}
-        self.item_idx = {}
+        self.user_idx = {}  # { user_ids : index }
+        self.item_idx = {}  # { item_ids : index }
         self.user_data = {}
-        self.similarity_matrix = np.zeros((num_users, num_users))
+        self.user_similarity_matrix = np.zeros((num_users, num_users))
+        self.item_similarity_matrix = np.zeros((num_items, num_items))
 
     def load_rating_csv(self, rating_file):
         with open(rating_file, 'r') as csv_file:
@@ -100,8 +101,8 @@ class CombinedCollaborativeFiltering:
         for i in range(self.num_users):
             for j in range(i + 1, self.num_users):
                 sim = self.calc_cosine_similarity(i, j)
-                self.similarity_matrix[i, j] = sim
-                self.similarity_matrix[j, i] = sim
+                self.user_similarity_matrix[i, j] = sim
+                self.user_similarity_matrix[j, i] = sim
         # print(simi_matrix[530:, 530:])
 
     # method: method used to calculate user-user similarity. 1-> cosine similarity, 2->pearson similairity
@@ -112,22 +113,14 @@ class CombinedCollaborativeFiltering:
         k = 0.001
 
         for j in range(self.num_users):
-            if j != user_i and self.ratings[j, item_a] != 0:
-                item_b = item_a
-            elif j != user_i and self.ratings[j, item_a] == 0:
-                # find most similar item 
 
-    def predict_rating(self, user_i, movie_j):
-        # calc similarity*rating diff for all users
-        k = 0.05
-        sum_term = 0
-        for i in range(self.num_users):
-            if i != user_i and self.ratings[i, movie_j] != -1:
-                # if i != user_i:
-                sum_term += simi_matrix[user_i, i] * (rating_data[i, movie_j] - user_data[i]["avg_rating"])
+            # if j != user_i and self.ratings[j, item_a] != 0:
+            #     item_b = item_a
+            # elif j != user_i and self.ratings[j, item_a] == 0:
+            #     # find most similar item rated by user j
 
-        rating = user_data[user_i]["avg_rating"] + k * sum_term
-        return rating
+            # get most similar item rated by user j
+            for b in self.item_similarity_matrix
 
 
 if __name__ == "__main__":
