@@ -2,6 +2,7 @@ import numpy as np
 import csv
 import pandas as pd
 import math
+from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from sklearn.model_selection import train_test_split
 
 
@@ -9,16 +10,25 @@ class CombinedCollaborativeFiltering:
     def __init__(self, num_users, num_items):
         self.num_users = num_users
         self.num_items = num_items
-        self.ratings = np.zeros((num_users, num_items))  # num_users x num_items
-        self.train_ratings = []
-        self.test_ratings = []
+        # self.ratings = np.zeros((num_users, num_items))  # num_users x num_items
+        self.train_ratings = np.zeros((num_users, num_items))  # rating matrix (num_users x num_items)
+        self.test_data = []  # list of samples
         self.user_idx = {}  # { user_ids : index }
         self.item_idx = {}  # { item_ids : index }
-        self.user_data = {}
-        self.user_similarity_matrix = np.zeros((num_users, num_users))
-        self.item_similarity_matrix = np.zeros((num_items, num_items))
+        self.user_data = {}  # {user_index: {"num_ratings":0, "sum_ratings":0 , "sum_sq_ratings":0 }}
 
-    def load_rating_csv(self, rating_file):
+        # similarities
+        self.user_similarity_matrix = np.zeros((num_users, num_users))
+        self.most_similar_users = np.zeros((num_users, num_users)).astype(int)  # stores index of most similar users
+        self.item_similarity_matrix = np.zeros((num_items, num_items))
+        self.most_similar_items = np.zeros((num_items, num_items)).astype(int)  # stores item_id of most similar item
+
+        # embeddings files
+        self.embed_file = ""
+        self.embed_model_file = ""
+        self.books_summary_file = ""
+
+    def read_training_csv(self, rating_file):
         with open(rating_file, 'r') as csv_file:
             csv_reader = csv.reader(csv_file)
             data = list(csv_reader)
@@ -38,7 +48,7 @@ class CombinedCollaborativeFiltering:
                 temp_u = self.user_idx[sample[0]]
             else:
                 self.user_idx[sample[0]] = u_idx
-                self.user_data[u_idx] = {"num_ratings": 0, "sum_rating": 0, "sum_rating_sq": 0}
+                self.user_data[u_idx] = {"num_ratings": 0, "sum_ratings": 0, "sum_sq_ratings": 0}
                 temp_u = u_idx
                 u_idx += 1
 
@@ -49,42 +59,57 @@ class CombinedCollaborativeFiltering:
                 temp_i = i_idx
                 i_idx += 1
 
-            self.ratings[temp_u, temp_i] = sample[2]
+            self.train_ratings[temp_u, temp_i] = sample[2]
             self.user_data[temp_u]["num_ratings"] += 1
-            self.user_data[temp_u]["sum_rating"] += sample[2]
-            self.user_data[temp_u]["sum_rating_sq"] += sample[2]*sample[2]
+            self.user_data[temp_u]["sum_ratings"] += sample[2]
+            self.user_data[temp_u]["sum_sq_ratings"] += sample[2] * sample[2]
 
         print("[CCF] load_rating_csv: number of users: ", u_idx)
         print("[CCF] load_rating_csv: number of items: ", i_idx)
+        self.num_users = u_idx
+        self.num_items = i_idx
         print("[CCF] load_rating_csv: rating matrix made")
 
-        # data = pd.read_csv(rating_file)
-        # print("[CCF] load_rating_csv: number of samples: ", len(data))
+    def read_testing_csv(self, test_file):
+        with open(test_file, 'r') as csv_file:
+            csv_reader = csv.reader(csv_file)
+            self.test_data = list(csv_reader)
 
-        # self.ratings = data.groupby(['user_id', 'book_id']).rating.mean().unstack(fill_value=-1)
-        # print("[CCF] load_rating_csv: Data has", self.ratings.shape[0], "Rows,", self.ratings.shape[1], "Columns")
+        del self.test_data[0]
+        print("[CCF] read_testing_csv: number of test samples: ", len(self.test_data))
 
-        # print("[CCF] load_rating_csv: data frame")
-        # print(self.ratings[:])
+        # convert to int
+        self.test_data = [list(map(int, i)) for i in self.test_data]
 
-        # train_data, test_data = train_test_split(data, train_size=0.9, random_state=20)
-        # self.train_ratings = train_data.groupby(['user_id', 'book_id']).rating.mean().unstack(fill_value=-1)
-        # self.test_ratings = test_data.groupby(['user_id', 'book_id']).rating.mean().unstack(fill_value=-1)
-        # print("[CCF] load_rating_csv: Training matrix shape: ", self.train_ratings.shape[0], "Rows,",
-        #       self.train_ratings.shape[1], "Columns")
-        # print("[CCF] load_rating_csv: Testing matrix shape", self.test_ratings.shape[0], "Rows,",
-        #       self.test_ratings.shape[1], "Columns")
-        #
-        # print("[CCF] load_rating_csv: prepare training sample's list")
+    def data_loader(self, train_file=None, test_file=None, embed_file=None, embed_model_file=None,
+                    books_summary_file=None):
+        if train_file is None:
+            print("[CCF] data_loader: No csv for training provided")
+            exit(-1)
+        else:
+            self.read_training_csv(train_file)
+
+        if test_file is not None:
+            self.read_testing_csv(test_file)
+        else:
+            print("[CCF] data_loader: No csv for test data provided")
+
+        self.embed_file = embed_file
+        self.embed_model_file = embed_model_file
+        self.books_summary_file = books_summary_file
+
+        # print shapes
+        print("user_idx: ", len(self.user_idx))
+        print("item_idx: ", len(self.item_idx))
 
     # find cosine similarity for user i and j
     # input: user id i and j
     def calc_cosine_similarity(self, i, j):
-        uid_i = self.user_idx[i]
-        uid_j = self.user_idx[j]
+        # uid_i = self.user_idx[i]
+        # uid_j = self.user_idx[j]
 
-        rating_i = np.array(self.ratings[i, :], copy=True)
-        rating_j = np.array(self.ratings[j, :], copy=True)
+        rating_i = np.array(self.train_ratings[i, :], copy=True)
+        rating_j = np.array(self.train_ratings[j, :], copy=True)
 
         # np.where(rating_i==-1, 0, rating_i)
         rating_i[rating_i == -1] = 0
@@ -92,38 +117,215 @@ class CombinedCollaborativeFiltering:
         rating_j[rating_j == -1] = 0
 
         dot_prod = np.dot(rating_i, rating_j)
-        similarity = dot_prod / (math.sqrt(self.user_data[i]["sum_rating_sq"]) *
-                                 math.sqrt(self.user_data[j]["sum_rating_sq"]))
+        similarity = dot_prod / (math.sqrt(self.user_data[i]["sum_sq_ratings"]) *
+                                 math.sqrt(self.user_data[j]["sum_sq_ratings"]))
         return similarity
 
-    def get_cosine_similarity_matrix(self):
-        # print(simi_matrix.shape)
+    # TODO
+    # find pearson similarity for user i and j
+    # input: user in
+    def calc_pearson_similarity(self, i, j):
+        return i * j
+
+    # method: 1 -> cosine similarity, 2 -> pearson similarity
+    def get_user_similarity_matrix(self, method=1):
+
         for i in range(self.num_users):
             for j in range(i + 1, self.num_users):
-                sim = self.calc_cosine_similarity(i, j)
+                sim = 0
+                if method == 1:
+                    # calc cosine similarity
+                    sim = self.calc_cosine_similarity(i, j)
+                elif method == 2:
+                    # calculate pearson similarity
+                    sim = self.calc_pearson_similarity(i, j)
+
                 self.user_similarity_matrix[i, j] = sim
                 self.user_similarity_matrix[j, i] = sim
-        # print(simi_matrix[530:, 530:])
+        print("[CCF] get_user_similarity_matrix: user-user similarity matrix made")
+
+    # for every user, gives a list of similar users with most similar first and least similar in the last
+    def get_most_similar_users(self):
+        self.most_similar_users = np.fliplr(np.argsort(self.user_similarity_matrix))
+
+    # embed file -> embeddings file (contains embedding of all the books): summary_embeddings
+    # embed_model_file -> Doc2Vec model based on the summaries: my_doc2vec_model
+    # book_file -> books and summaries: new_books.csv
+    def get_item_similarity_matrix(self):
+        # Load the embeddings from the file
+        embeddings = np.loadtxt(self.embed_file)
+
+        # Load model file
+        model = Doc2Vec.load(self.embed_model_file)
+        # Load the new_books.csv which contains book id and summary
+        document = []
+        book_id = []
+        summary_file = pd.read_csv(self.books_summary_file)
+
+        for index, row in summary_file.iterrows():
+            line_list = row[1].split()
+            document.append(line_list)
+            book_id.append(row[0])
+
+        tagged_data = [TaggedDocument(d, [i]) for d, i in zip(document, book_id)]
+
+        for row in range(self.num_items):
+            new_vector = model.infer_vector(document[row])
+            sims = model.docvecs.most_similar([new_vector], topn=self.num_items)
+            for col in range(self.num_items):
+                self.most_similar_items[row][col] = sims[col][0]
+                self.item_similarity_matrix[row][col] = sims[col][1]
 
     # method: method used to calculate user-user similarity. 1-> cosine similarity, 2->pearson similairity
-    def fit(self, method=1):
-        pass
+    # matrix: 1 -> user_similarity, 2 -> item_similarity, 3 -> both
+    def fit(self, method=1, matrix=3, save_file=None):
+        self.user_similarity_matrix = np.ones((self.num_users, self.num_users))
+        self.most_similar_users = np.zeros((self.num_users, self.num_users)).astype(int)  # stores index of most similar users
+        # calculate user - user similaruty matrix
+        if matrix == 1 or matrix == 3:
+            print("[CCF] fit: preparing user-user similarity matrix....")
+            self.get_user_similarity_matrix(method)
+            print("[CCF] fit: user-user similarity matrix generated")
+            print("[CCF] fit: preparing most similar user matrix....")
+            self.get_most_similar_users()
+            print("[CCF] fit: most similar user matrix generated")
 
-    def predict_rating(self, user_i, item_a):
-        k = 0.001
+            if save_file:
+                print("[CCF] fit: writing user similarity matrix as npy....")
+                np.save("user_similarity_matrix.npy", self.user_similarity_matrix)
+                np.save("most_similar_users.npy", self.most_similar_users)
+                print("[CCF] fit: writing user similarity matrix completed!")
 
-        for j in range(self.num_users):
+        self.item_similarity_matrix = np.ones((self.num_items, self.num_items))
+        self.most_similar_items = np.zeros((self.num_items, self.num_items)).astype(int)  # stores item_id of most similar item
+        # calculate item - item similarity matrix
+        if matrix == 2 or matrix == 3:
+            print("[CCF] fit: preparing item - item similarity matrix using embeddings....")
+            self.get_item_similarity_matrix()
+            print("[CCF] fit: item - item similarity matrix generated")
 
-            # if j != user_i and self.ratings[j, item_a] != 0:
-            #     item_b = item_a
-            # elif j != user_i and self.ratings[j, item_a] == 0:
-            #     # find most similar item rated by user j
+            if save_file:
+                print("[CCF] fit: writing item similarity matrix as npy....")
+                np.save("item_similarity_matrix.npy", self.item_similarity_matrix)
+                np.save("most_similar_items.npy", self.most_similar_items)
+                print("[CCF] fit: writing item similarity matrix completed!")
 
+        print("[CCF] fit: Completed!")
+
+    def load_similarity_matrices_csv(self, user_file, item_file):
+        print("[CCF] load_similarity_matrices: loading user similarity matrix.....")
+        with open(user_file, 'r') as csv_file:
+            reader = csv.reader(csv_file)
+            data = list(reader)
+        data = [list(map(float, i)) for i in data]
+        self.user_similarity_matrix = np.array(data)
+        print("[CCF] load_similarity_matrices: user similarity matrix loading complete!")
+
+        print("[CCF] load_similarity_matrices: loading item similarity matrix.....")
+        with open(item_file, 'r') as csv_file:
+            reader = csv.reader(csv_file)
+            data = list(reader)
+        data = [list(map(int, i)) for i in data]
+        self.item_similarity_matrix = np.array(data)
+        print("[CCF] load_similarity_matrices: item similarity matrix loading complete!")
+
+    def load_similarity_matrix(self, user_file1="user_similarity_matrix.npy", user_file2="most_similar_users.npy",
+                               item_file1="item_similarity_matrix.npy", item_file2="most_similar_items.npy"):
+        # user similarity matrix
+        print("[CCF] load_similarity_matrices: loading user similarity matrix.....")
+        self.user_similarity_matrix = np.load(user_file1)
+        print("[CCF] load_similarity_matrices: user similarity matrix loading complete!")
+
+        if self.user_similarity_matrix.shape != (self.num_users, self.num_users):
+            print("[CCF] load_similarity_matrix: user similarity matrix dimensions mismatch. Expected: ",
+                  (self.num_users, self.num_users), ", Received: ", self.user_similarity_matrix.shape)
+            exit(-1)
+
+        # most similar user matrix
+        print("[CCF] load_similarity_matrices: loading most similar user matrix.....")
+        self.most_similar_users = np.load(user_file2)
+        print("[CCF] load_similarity_matrices: most similar user matrix loading complete!")
+
+        if self.most_similar_users.shape != (self.num_users, self.num_users):
+            print("[CCF] load_similarity_matrix: most similar user matrix dimensions mismatch. Expected: ",
+                  (self.num_users, self.num_users), ", Received: ", self.most_similar_users.shape)
+            exit(-1)
+
+        # item similarity matrix
+        print("[CCF] load_similarity_matrices: loading item similarity matrix.....")
+        self.item_similarity_matrix = np.load(item_file1)
+        print("[CCF] load_similarity_matrices: item similarity matrix loading complete!")
+
+        if self.item_similarity_matrix.shape != (self.num_items, self.num_items):
+            print("[CCF] load_similarity_matrix: item similarity matrix dimensions mismatch. Expected: ",
+                  (self.num_items, self.num_items), ", Received: ", self.item_similarity_matrix.shape)
+            exit(-1)
+
+        # most similar item matrix
+        print("[CCF] load_similarity_matrices: loading most similar item matrix.....")
+        self.most_similar_items = np.load(item_file2)
+        print("[CCF] load_similarity_matrices: most similar item matrix loading complete!")
+
+        if self.most_similar_items.shape != (self.num_items, self.num_items):
+            print("[CCF] load_similarity_matrix: most similar item matrix dimensions mismatch. Expected: ",
+                  (self.num_items, self.num_items), ", Received: ", self.most_similar_items.shape)
+            exit(-1)
+
+    # PREDICT RATING
+    # if j != user_i and self.ratings[j, item_a] != 0:
+    #     item_b = item_a
+    # elif j != user_i and self.ratings[j, item_a] == 0:
+    #     # find most similar item rated by user j
+    def predict_rating(self, u_i, i_a, k, num_similar_users):
+
+        # i_a -> index of book a in our matrix, i_id -> book_id, i_b -> index of that book in our matrix
+        # u_i -> index of user i in our matrix, u_j -> index of user b in our matrix
+        sum_term = 0
+        i_b = i_a
+
+        # calculate summation term
+        # consider only top "num_similar_users" similar users for rating prediction
+        for idx in range(1, num_similar_users+1):
+            u_j = self.most_similar_users[u_i, idx]
             # get most similar item rated by user j
-            for b in self.item_similarity_matrix
+            for i_id in self.most_similar_items[i_a]:
+                i_b = self.item_idx[i_id]
+                # if user u_j has rated item i_b
+                if self.train_ratings[u_j, i_b] != 0:
+                    break
+
+            avg_r_u_j = self.user_data[u_j]["sum_ratings"] / self.user_data[u_j]["num_ratings"]
+            sum_term += self.user_similarity_matrix[u_i, u_j] * self.item_similarity_matrix[i_a, i_b] * (
+                        self.train_ratings[u_j, i_b] - avg_r_u_j)
+
+        rating = self.user_data[u_i]["sum_ratings"] / self.user_data[u_i]["num_ratings"] + k * sum_term
+        return rating
+
+    def predict(self, k, num_similar_users=100):
+        f = open("predicted_ratings.csv", 'w')
+        csv_writer = csv.writer(f)
+        csv_writer.writerow(["user_id", "book_id", "rating", "predicted"])
+        print("[CCF] predict: predicting ratings.....")
+        for sample in self.test_data:
+            user = self.user_idx[sample[0]]
+            book = self.item_idx[sample[1]]
+            pred = self.predict_rating(user, book, k, num_similar_users)
+            print(sample[0], "\t", sample[1], "\t", sample[2], "\t", pred)
+            csv_writer.writerow([str(sample[0]), str(sample[1]), str(sample[2]), str(pred)])
+        f.close()
+        print("[CCF] predict: ratings predicted!")
 
 
 if __name__ == "__main__":
-    obj_ccf = CombinedCollaborativeFiltering(10000, 6176)
-    obj_ccf.load_rating_csv("new_ratings.csv")
+    obj_ccf = CombinedCollaborativeFiltering(10000, 10000)
+    obj_ccf.data_loader(train_file="new_ratings.csv",
+                        test_file="new_ratings.csv",
+                        embed_file="summary_embeddings",
+                        embed_model_file="my_doc2vec_model",
+                        books_summary_file="new_books.csv")
+    obj_ccf.fit(method=1, save_file=True, matrix=2)
+    # obj_ccf.load_similarity_matrix()
+    print(obj_ccf.item_similarity_matrix[:10, :10])
+    # print(obj_ccf.most_similar_users[:10, :10])
     # print(obj_ccf.ratings[2, :])
+    # obj_ccf.predict(0.5)

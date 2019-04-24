@@ -3,6 +3,11 @@
 # swap files
 *.sw*
 
+# csv file
+*.csv
+*.npy
+*model*
+
 # folders
 data
 results
