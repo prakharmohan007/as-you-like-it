@@ -4,6 +4,7 @@ import pandas as pd
 import math
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from sklearn.model_selection import train_test_split
+from gensim.test.utils import get_tmpfile
 
 
 class CombinedCollaborativeFiltering:
@@ -151,12 +152,13 @@ class CombinedCollaborativeFiltering:
     # embed file -> embeddings file (contains embedding of all the books): summary_embeddings
     # embed_model_file -> Doc2Vec model based on the summaries: my_doc2vec_model
     # book_file -> books and summaries: new_books.csv
+    # most_similar_item contains the indices and not the book_ids
     def get_item_similarity_matrix(self):
         # Load the embeddings from the file
         embeddings = np.loadtxt(self.embed_file)
 
         # Load model file
-        model = Doc2Vec.load(self.embed_model_file)
+        #model = Doc2Vec.load(self.embed_model_file)
         # Load the new_books.csv which contains book id and summary
         document = []
         book_id = []
@@ -167,7 +169,11 @@ class CombinedCollaborativeFiltering:
             document.append(line_list)
             book_id.append(row[0])
 
-        tagged_data = [TaggedDocument(d, [i]) for d, i in zip(document, book_id)]
+        tagged_data = [TaggedDocument(d, [self.item_idx[i]]) for d, i in zip(document, book_id)]
+        model = Doc2Vec(tagged_data, vector_size=125, workers=6)
+        fname = get_tmpfile("my_doc2vec_model")
+        model.save(fname)
+        model.delete_temporary_training_data(keep_doctags_vectors=True, keep_inference=True)
 
         for row in range(self.num_items):
             new_vector = model.infer_vector(document[row])
