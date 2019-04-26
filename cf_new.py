@@ -5,7 +5,8 @@ import math
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from sklearn.model_selection import train_test_split
 from gensim.test.utils import get_tmpfile
-
+import smart_open
+import gensim
 
 class CombinedCollaborativeFiltering:
     def __init__(self, num_users, num_items):
@@ -139,7 +140,11 @@ class CombinedCollaborativeFiltering:
     # for every user, gives a list of similar users with most similar first and least similar in the last
     def get_most_similar_users(self):
         self.most_similar_users = np.fliplr(np.argsort(self.user_similarity_matrix))
-
+    
+    def read_corpus(self,fname):
+        x = pd.read_csv(fname)
+        for index,row in x.iterrows():
+            yield gensim.models.doc2vec.TaggedDocument(gensim.utils.simple_preprocess(row[1]), [row[0]])
     # embed file -> embeddings file (contains embedding of all the books): summary_embeddings
     # embed_model_file -> Doc2Vec model based on the summaries: my_doc2vec_model
     # book_file -> books and summaries: new_books.csv
@@ -151,7 +156,7 @@ class CombinedCollaborativeFiltering:
         # Load model file
         # model = Doc2Vec.load(self.embed_model_file)
         # Load the new_books.csv which contains book id and summary
-        document = []
+        '''document = []
         book_index = []
         summary_file = pd.read_csv(self.books_summary_file)
 
@@ -162,17 +167,27 @@ class CombinedCollaborativeFiltering:
 
         tagged_data = [TaggedDocument(d, [i]) for d, i in zip(document, book_index)]
         model = Doc2Vec(tagged_data, vector_size=125, workers=6)
-        fname = get_tmpfile("my_doc2vec_model")
-        model.save(fname)
+        '''
+        train_path = self.books_summary_file
+        corpus = list(self.read_corpus(train_path))
+
+        model = gensim.models.doc2vec.Doc2Vec(corpus, vector_size = 125, workers =4)
+
+        id_to_embeddings = {}
+        for index in range(len(corpus)):
+            id_to_embeddings[int(corpus[index].tags[0])]=  model.infer_vector(corpus[index].words)
+        
+        #fname = get_tmpfile("my_doc2vec_model")
+        #model.save(fname)
         model.delete_temporary_training_data(keep_doctags_vectors=True, keep_inference=True)
 
-        for row in range(self.num_items):
-            new_vector = model.infer_vector(document[row])
-            sims = model.docvecs.most_similar([new_vector], topn=self.num_items)
-            for col in range(self.num_items):
-                self.most_similar_items[row][col] = sims[col][0]
-                self.item_similarity_matrix[row][col] = sims[col][1]
-
+        #for row in range(self.num_items):
+         #   new_vector = model.infer_vector(document[row])
+          #  sims = model.docvecs.most_similar([new_vector], topn=self.num_items)
+           # for col in range(self.num_items):
+            #    self.most_similar_items[row][col] = sims[col][0]
+             #   self.item_similarity_matrix[row][col] = sims[col][1]
+        
     # method: method used to calculate user-user similarity. 1-> cosine similarity, 2->pearson similairity
     # matrix: 1 -> user_similarity, 2 -> item_similarity, 3 -> both
     def fit(self, method=1, matrix=3, save_file=None):
