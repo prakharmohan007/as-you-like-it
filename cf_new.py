@@ -187,7 +187,14 @@ class CombinedCollaborativeFiltering:
            # for col in range(self.num_items):
             #    self.most_similar_items[row][col] = sims[col][0]
              #   self.item_similarity_matrix[row][col] = sims[col][1]
-        
+        for id1 in id_to_embeddings:
+            for id2 in id_to_embeddings:
+                index1 = self.item_idx[id1] 
+                index2 = self.item_idx[id2]
+                sim = self.calc_cosine_similarity_item(id_to_embeddings[id1], id_to_embeddings[id2])
+                self.item_similarity_matrix[index1, index2] = sim 
+                
+                
     # method: method used to calculate user-user similarity. 1-> cosine similarity, 2->pearson similairity
     # matrix: 1 -> user_similarity, 2 -> item_similarity, 3 -> both
     def fit(self, method=1, matrix=3, save_file=None):
@@ -224,7 +231,14 @@ class CombinedCollaborativeFiltering:
                 print("[CCF] fit: writing item similarity matrix completed!")
 
         print("[CCF] fit: Completed!")
+    
+    def calc_cosine_similarity_item(self, embedding_i, embedding_j):
 
+        dot_prod = np.dot(embedding_i, embedding_j)
+        similarity = dot_prod / ((LA.norm(embedding_i,ord=2)) * (LA.norm(embedding_j,ord=2)))
+        return similarity
+    
+    
     def load_similarity_matrices_csv(self, user_file, item_file):
         print("[CCF] load_similarity_matrices: loading user similarity matrix.....")
         with open(user_file, 'r') as csv_file:
