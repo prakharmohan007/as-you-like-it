@@ -152,15 +152,15 @@ class CombinedCollaborativeFiltering:
         # model = Doc2Vec.load(self.embed_model_file)
         # Load the new_books.csv which contains book id and summary
         document = []
-        book_id = []
+        book_index = []
         summary_file = pd.read_csv(self.books_summary_file)
 
         for index, row in summary_file.iterrows():
             line_list = row[1].split()
             document.append(line_list)
-            book_id.append(row[0])
+            book_index.append(self.item_idx[row[0]])
 
-        tagged_data = [TaggedDocument(d, [self.item_idx[i]]) for d, i in zip(document, book_id)]
+        tagged_data = [TaggedDocument(d, [i]) for d, i in zip(document, book_index)]
         model = Doc2Vec(tagged_data, vector_size=125, workers=6)
         fname = get_tmpfile("my_doc2vec_model")
         model.save(fname)
