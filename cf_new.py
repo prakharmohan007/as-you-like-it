@@ -99,10 +99,6 @@ class CombinedCollaborativeFiltering:
         self.embed_model_file = embed_model_file
         self.books_summary_file = books_summary_file
 
-        # print shapes
-        print("user_idx: ", len(self.user_idx))
-        print("item_idx: ", len(self.item_idx))
-
     # find cosine similarity for user i and j
     # input: user id i and j
     def calc_cosine_similarity(self, i, j):
@@ -111,11 +107,6 @@ class CombinedCollaborativeFiltering:
 
         rating_i = np.array(self.train_ratings[i, :], copy=True)
         rating_j = np.array(self.train_ratings[j, :], copy=True)
-
-        # np.where(rating_i==-1, 0, rating_i)
-        rating_i[rating_i == -1] = 0
-        # np.where(rating_j==-1, 0, rating_j)
-        rating_j[rating_j == -1] = 0
 
         dot_prod = np.dot(rating_i, rating_j)
         similarity = dot_prod / (math.sqrt(self.user_data[i]["sum_sq_ratings"]) *
@@ -132,7 +123,7 @@ class CombinedCollaborativeFiltering:
     def get_user_similarity_matrix(self, method=1):
 
         for i in range(self.num_users):
-            for j in range(i + 1, self.num_users):
+            for j in range(i, self.num_users):
                 sim = 0
                 if method == 1:
                     # calc cosine similarity
@@ -158,7 +149,7 @@ class CombinedCollaborativeFiltering:
         embeddings = np.loadtxt(self.embed_file)
 
         # Load model file
-        #model = Doc2Vec.load(self.embed_model_file)
+        # model = Doc2Vec.load(self.embed_model_file)
         # Load the new_books.csv which contains book id and summary
         document = []
         book_id = []
@@ -186,7 +177,7 @@ class CombinedCollaborativeFiltering:
     # matrix: 1 -> user_similarity, 2 -> item_similarity, 3 -> both
     def fit(self, method=1, matrix=3, save_file=None):
         self.user_similarity_matrix = np.ones((self.num_users, self.num_users))
-        self.most_similar_users = np.zeros((self.num_users, self.num_users)).astype(int)  # stores index of most similar users
+        self.most_similar_users = np.zeros((self.num_users, self.num_users)).astype(int)
         # calculate user - user similaruty matrix
         if matrix == 1 or matrix == 3:
             print("[CCF] fit: preparing user-user similarity matrix....")
@@ -203,7 +194,8 @@ class CombinedCollaborativeFiltering:
                 print("[CCF] fit: writing user similarity matrix completed!")
 
         self.item_similarity_matrix = np.ones((self.num_items, self.num_items))
-        self.most_similar_items = np.zeros((self.num_items, self.num_items)).astype(int)  # stores item_id of most similar item
+        self.most_similar_items = np.zeros((self.num_items, self.num_items)).astype(
+            int)  # stores item_id of most similar item
         # calculate item - item similarity matrix
         if matrix == 2 or matrix == 3:
             print("[CCF] fit: preparing item - item similarity matrix using embeddings....")
@@ -291,18 +283,18 @@ class CombinedCollaborativeFiltering:
 
         # calculate summation term
         # consider only top "num_similar_users" similar users for rating prediction
-        for idx in range(1, num_similar_users+1):
+        for idx in range(1, num_similar_users + 1):
             u_j = self.most_similar_users[u_i, idx]
             # get most similar item rated by user j
-            for i_id in self.most_similar_items[i_a]:
-                i_b = self.item_idx[i_id]
+            for i_b in self.most_similar_items[i_a]:
+                # i_b = self.item_idx[i_id]
                 # if user u_j has rated item i_b
                 if self.train_ratings[u_j, i_b] != 0:
                     break
 
             avg_r_u_j = self.user_data[u_j]["sum_ratings"] / self.user_data[u_j]["num_ratings"]
             sum_term += self.user_similarity_matrix[u_i, u_j] * self.item_similarity_matrix[i_a, i_b] * (
-                        self.train_ratings[u_j, i_b] - avg_r_u_j)
+                    self.train_ratings[u_j, i_b] - avg_r_u_j)
 
         rating = self.user_data[u_i]["sum_ratings"] / self.user_data[u_i]["num_ratings"] + k * sum_term
         return rating
@@ -312,11 +304,12 @@ class CombinedCollaborativeFiltering:
         csv_writer = csv.writer(f)
         csv_writer.writerow(["user_id", "book_id", "rating", "predicted"])
         print("[CCF] predict: predicting ratings.....")
-        for sample in self.test_data:
+        for sample in self.test_data[:10]:
             user = self.user_idx[sample[0]]
             book = self.item_idx[sample[1]]
             pred = self.predict_rating(user, book, k, num_similar_users)
-            print(sample[0], "\t", sample[1], "\t", sample[2], "\t", pred)
+            print(sample[0], "\t", sample[1], "\t", sample[2], "\t", pred,
+                  self.user_data[user]["sum_ratings"] / self.user_data[user]["num_ratings"])
             csv_writer.writerow([str(sample[0]), str(sample[1]), str(sample[2]), str(pred)])
         f.close()
         print("[CCF] predict: ratings predicted!")
@@ -329,9 +322,9 @@ if __name__ == "__main__":
                         embed_file="summary_embeddings",
                         embed_model_file="my_doc2vec_model",
                         books_summary_file="new_books.csv")
-    obj_ccf.fit(method=1, save_file=True, matrix=2)
-    # obj_ccf.load_similarity_matrix()
-    print(obj_ccf.item_similarity_matrix[:10, :10])
-    # print(obj_ccf.most_similar_users[:10, :10])
+    obj_ccf.fit(method=1, save_file=True, matrix=1)
+    obj_ccf.load_similarity_matrix()
+    # print(obj_ccf.item_similarity_matrix[:10, :10])
+    print(obj_ccf.user_similarity_matrix[:10, :10])
     # print(obj_ccf.ratings[2, :])
     # obj_ccf.predict(0.5)
