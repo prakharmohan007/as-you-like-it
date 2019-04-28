@@ -153,10 +153,10 @@ class CombinedCollaborativeFiltering:
         # Load the embeddings from the file
         embeddings = np.loadtxt(self.embed_file)
 
-        # Load model file
-        # model = Doc2Vec.load(self.embed_model_file)
+       # Load model file
+        #model = Doc2Vec.load(self.embed_model_file)
         # Load the new_books.csv which contains book id and summary
-        '''document = []
+        document = []
         book_index = []
         summary_file = pd.read_csv(self.books_summary_file)
 
@@ -176,24 +176,25 @@ class CombinedCollaborativeFiltering:
         id_to_embeddings = {}
         for index in range(len(corpus)):
             id_to_embeddings[int(corpus[index].tags[0])]=  model.infer_vector(corpus[index].words)
-        
-        #fname = get_tmpfile("my_doc2vec_model")
-        #model.save(fname)
+        '''
+        fname = get_tmpfile("my_doc2vec_model")
+        model.save(fname)
         model.delete_temporary_training_data(keep_doctags_vectors=True, keep_inference=True)
 
-        #for row in range(self.num_items):
-         #   new_vector = model.infer_vector(document[row])
-          #  sims = model.docvecs.most_similar([new_vector], topn=self.num_items)
-           # for col in range(self.num_items):
-            #    self.most_similar_items[row][col] = sims[col][0]
-             #   self.item_similarity_matrix[row][col] = sims[col][1]
-        for id1 in id_to_embeddings:
+        for row in range(self.num_items):
+            new_vector = model.infer_vector(document[row])
+            sims = model.docvecs.most_similar([new_vector], topn=self.num_items)
+            for col in range(self.num_items):
+                self.most_similar_items[row][col] = sims[col][0]
+                self.item_similarity_matrix[row][col] = sims[col][1]
+        '''
+	for id1 in id_to_embeddings:
             for id2 in id_to_embeddings:
                 index1 = self.item_idx[id1] 
                 index2 = self.item_idx[id2]
                 sim = self.calc_cosine_similarity_item(id_to_embeddings[id1], id_to_embeddings[id2])
                 self.item_similarity_matrix[index1, index2] = sim 
-                
+        '''       
                 
     # method: method used to calculate user-user similarity. 1-> cosine similarity, 2->pearson similairity
     # matrix: 1 -> user_similarity, 2 -> item_similarity, 3 -> both
@@ -351,9 +352,10 @@ if __name__ == "__main__":
                         embed_file="summary_embeddings",
                         embed_model_file="my_doc2vec_model",
                         books_summary_file="new_books.csv")
-    obj_ccf.fit(method=1, save_file=True, matrix=1)
+
+    #obj_ccf.fit(method=1, save_file=False, matrix=2)
     obj_ccf.load_similarity_matrix()
-    # print(obj_ccf.item_similarity_matrix[:10, :10])
-    print(obj_ccf.user_similarity_matrix[:10, :10])
-    # print(obj_ccf.ratings[2, :])
-    # obj_ccf.predict(0.5)
+    #print(obj_ccf.item_similarity_matrix[:10, :10])
+    #print(obj_ccf.user_similarity_matrix[:10, :10])
+    print(obj_ccf.train_ratings[2, :])
+    obj_ccf.predict(0.05)
