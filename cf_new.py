@@ -1,12 +1,13 @@
 import numpy as np
+from numpy import linalg as LA
 import csv
 import pandas as pd
 import math
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 from sklearn.model_selection import train_test_split
 from gensim.test.utils import get_tmpfile
-import smart_open
 import gensim
+
 
 class CombinedCollaborativeFiltering:
     def __init__(self, num_users, num_items):
@@ -122,7 +123,6 @@ class CombinedCollaborativeFiltering:
 
     # method: 1 -> cosine similarity, 2 -> pearson similarity
     def get_user_similarity_matrix(self, method=1):
-
         for i in range(self.num_users):
             for j in range(i, self.num_users):
                 sim = 0
@@ -141,10 +141,19 @@ class CombinedCollaborativeFiltering:
     def get_most_similar_users(self):
         self.most_similar_users = np.fliplr(np.argsort(self.user_similarity_matrix))
     
-    def read_corpus(self,fname):
-        x = pd.read_csv(fname)
-        for index,row in x.iterrows():
+    def read_corpus(self):
+        x = pd.read_csv(self.books_summary_file)
+        for index, row in x.iterrows():
             yield gensim.models.doc2vec.TaggedDocument(gensim.utils.simple_preprocess(row[1]), [row[0]])
+
+    def calc_cosine_similarity_item(self, embedding_i, embedding_j):
+        dot_prod = np.dot(embedding_i, embedding_j)
+        similarity = dot_prod / ((LA.norm(embedding_i, ord=2)) * (LA.norm(embedding_j, ord=2)))
+        return similarity
+
+    def get_most_similar_items(self):
+        self.most_similar_items = np.fliplr(np.argsort(self.item_similarity_matrix))
+
     # embed file -> embeddings file (contains embedding of all the books): summary_embeddings
     # embed_model_file -> Doc2Vec model based on the summaries: my_doc2vec_model
     # book_file -> books and summaries: new_books.csv
@@ -153,49 +162,60 @@ class CombinedCollaborativeFiltering:
         # Load the embeddings from the file
         embeddings = np.loadtxt(self.embed_file)
 
-       # Load model file
-        #model = Doc2Vec.load(self.embed_model_file)
+        # Load model file
+        # model = Doc2Vec.load(self.embed_model_file)
         # Load the new_books.csv which contains book id and summary
-        document = []
-        book_index = []
-        summary_file = pd.read_csv(self.books_summary_file)
 
-        for index, row in summary_file.iterrows():
-            line_list = row[1].split()
-            document.append(line_list)
-            book_index.append(self.item_idx[row[0]])
+        # Author - Manish
+        # document = []
+        # book_index = []
+        # summary_file = pd.read_csv(self.books_summary_file)
+        # for index, row in summary_file.iterrows():
+        #     line_list = row[1].split()
+        #     document.append(line_list)
+        #     book_index.append(self.item_idx[row[0]])
+        #
+        # tagged_data = [TaggedDocument(d, [i]) for d, i in zip(document, book_index)]
+        # model = Doc2Vec(tagged_data, vector_size=125, workers=6)
 
-        tagged_data = [TaggedDocument(d, [i]) for d, i in zip(document, book_index)]
-        model = Doc2Vec(tagged_data, vector_size=125, workers=6)
-        '''
-        train_path = self.books_summary_file
-        corpus = list(self.read_corpus(train_path))
+        # fname = get_tmpfile("my_doc2vec_model")
+        # model.save(fname)
+        # model.delete_temporary_training_data(keep_doctags_vectors=True, keep_inference=True)
 
-        model = gensim.models.doc2vec.Doc2Vec(corpus, vector_size = 125, workers =4)
+        # for row in range(self.num_items):
+        #     new_vector = model.infer_vector(document[row])
+        #     sims = model.docvecs.most_similar([new_vector], topn=self.num_items)
+        #     for col in range(self.num_items):
+        #         # sims[col][0] -> index of most similar item
+        #         # sims[col][1] -> similarity
+        #         self.most_similar_items[row][col] = sims[col][0]
+        #         self.item_similarity_matrix[row][sims[col][0]] = sims[col][1]
 
-        id_to_embeddings = {}
+        # Author: Vansh
+        print("[CCF] get_item_similarity_matrix: creating corpus.....")
+        corpus = list(self.read_corpus())
+        print("[CCF] get_item_similarity_matrix: corpus created")
+
+        # train gensim doc2vec
+        print("[CCF] get_item_similarity_matrix: Training Gensim Doc2Vec....")
+        model = gensim.models.doc2vec.Doc2Vec(corpus, vector_size=125, workers=6)
+        print("[CCF] get_item_similarity_matrix: Gensim Doc2Vec trained....")
+
+        print("[CCF] get_item_similarity_matrix: Get embedding vectors for all summaries")
+        id_to_embeddings = {}  # book id: embedding
         for index in range(len(corpus)):
-            id_to_embeddings[int(corpus[index].tags[0])]=  model.infer_vector(corpus[index].words)
-        '''
-        fname = get_tmpfile("my_doc2vec_model")
-        model.save(fname)
-        model.delete_temporary_training_data(keep_doctags_vectors=True, keep_inference=True)
-
-        for row in range(self.num_items):
-            new_vector = model.infer_vector(document[row])
-            sims = model.docvecs.most_similar([new_vector], topn=self.num_items)
-            for col in range(self.num_items):
-                self.most_similar_items[row][col] = sims[col][0]
-                self.item_similarity_matrix[row][col] = sims[col][1]
-        '''
-	for id1 in id_to_embeddings:
+            id_to_embeddings[int(corpus[index].tags[0])] = model.infer_vector(corpus[index].words)
+        print("[CCF] get_item_similarity_matrix: Embeddings generated, preparing similarity matrix")
+        for id1 in id_to_embeddings:
             for id2 in id_to_embeddings:
-                index1 = self.item_idx[id1] 
+                index1 = self.item_idx[id1]
                 index2 = self.item_idx[id2]
                 sim = self.calc_cosine_similarity_item(id_to_embeddings[id1], id_to_embeddings[id2])
-                self.item_similarity_matrix[index1, index2] = sim 
-        '''       
-                
+                self.item_similarity_matrix[index1, index2] = sim
+                self.item_similarity_matrix[index2, index1] = sim
+
+        print("[CCF] get_user_similarity_matrix: user-user similarity matrix made")
+
     # method: method used to calculate user-user similarity. 1-> cosine similarity, 2->pearson similairity
     # matrix: 1 -> user_similarity, 2 -> item_similarity, 3 -> both
     def fit(self, method=1, matrix=3, save_file=None):
@@ -224,6 +244,9 @@ class CombinedCollaborativeFiltering:
             print("[CCF] fit: preparing item - item similarity matrix using embeddings....")
             self.get_item_similarity_matrix()
             print("[CCF] fit: item - item similarity matrix generated")
+            print("[CCF] fit: preparing most similar item matrix....")
+            self.get_most_similar_items()
+            print("[CCF] fit: most similar item matrix generated")
 
             if save_file:
                 print("[CCF] fit: writing item similarity matrix as npy....")
@@ -232,14 +255,7 @@ class CombinedCollaborativeFiltering:
                 print("[CCF] fit: writing item similarity matrix completed!")
 
         print("[CCF] fit: Completed!")
-    
-    def calc_cosine_similarity_item(self, embedding_i, embedding_j):
 
-        dot_prod = np.dot(embedding_i, embedding_j)
-        similarity = dot_prod / ((LA.norm(embedding_i,ord=2)) * (LA.norm(embedding_j,ord=2)))
-        return similarity
-    
-    
     def load_similarity_matrices_csv(self, user_file, item_file):
         print("[CCF] load_similarity_matrices: loading user similarity matrix.....")
         with open(user_file, 'r') as csv_file:
@@ -309,6 +325,7 @@ class CombinedCollaborativeFiltering:
         # i_a -> index of book a in our matrix, i_id -> book_id, i_b -> index of that book in our matrix
         # u_i -> index of user i in our matrix, u_j -> index of user b in our matrix
         sum_term = 0
+        sum_term_k = 0
         i_b = i_a
 
         # calculate summation term
@@ -325,8 +342,10 @@ class CombinedCollaborativeFiltering:
             avg_r_u_j = self.user_data[u_j]["sum_ratings"] / self.user_data[u_j]["num_ratings"]
             sum_term += self.user_similarity_matrix[u_i, u_j] * self.item_similarity_matrix[i_a, i_b] * (
                     self.train_ratings[u_j, i_b] - avg_r_u_j)
+            sum_term_k += self.user_similarity_matrix[u_i, u_j] * self.item_similarity_matrix[i_a, i_b]
 
-        rating = self.user_data[u_i]["sum_ratings"] / self.user_data[u_i]["num_ratings"] + k * sum_term
+        # rating = self.user_data[u_i]["sum_ratings"] / self.user_data[u_i]["num_ratings"] + k * sum_term
+        rating = self.user_data[u_i]["sum_ratings"] / self.user_data[u_i]["num_ratings"] + sum_term/sum_term_k
         return rating
 
     def predict(self, k, num_similar_users=100):
@@ -334,7 +353,7 @@ class CombinedCollaborativeFiltering:
         csv_writer = csv.writer(f)
         csv_writer.writerow(["user_id", "book_id", "rating", "predicted"])
         print("[CCF] predict: predicting ratings.....")
-        for sample in self.test_data[:10]:
+        for sample in self.test_data:
             user = self.user_idx[sample[0]]
             book = self.item_idx[sample[1]]
             pred = self.predict_rating(user, book, k, num_similar_users)
@@ -344,18 +363,73 @@ class CombinedCollaborativeFiltering:
         f.close()
         print("[CCF] predict: ratings predicted!")
 
+    def evaluate(self, k, num_similar_users=None, num_samples=None):
+        MAE = 0
+        RMSE = 0
+        # f = open("predicted_ratings.csv", 'w')
+        # csv_writer = csv.writer(f)
+        # csv_writer.writerow(["user_id", "book_id", "rating", "predicted"])
+
+        if num_samples is None:
+            num_samples = len(self.test_data)
+
+        if num_similar_users is None:
+            num_similar_users = self.num_users - 1
+
+        sample_num = 0
+        num_samples = 50000
+
+        print("[CCF] evaluate: Evaluation started.....")
+        print("USER \t\t ITEM \t\t Actual \t\t Predicted \t\t Avg")
+        for sample in self.test_data[100001:150000]:
+            user = self.user_idx[sample[0]]
+            book = self.item_idx[sample[1]]
+            pred = self.predict_rating(user, book, k, num_similar_users)
+
+            sample_num += 1
+            print(sample_num)
+
+            # print(sample[0], "\t\t", sample[1], "\t\t", sample[2], "\t\t", pred, "\t\t",
+            #       self.user_data[user]["sum_ratings"] / self.user_data[user]["num_ratings"])
+            # csv_writer.writerow([str(sample[0]), str(sample[1]), str(sample[2]), str(pred)])
+            MAE += abs(sample[2] - pred)
+            RMSE += (sample[2] - pred) ** 2
+
+        # f.close()
+        MAE = MAE / num_samples  # len(self.test_data)
+        # RMSE = (RMSE / len(self.test_data)) ** (1 / 2)
+        sqreRMSE = RMSE / num_samples
+        RMSE = (RMSE / num_samples) ** (1 / 2)
+        print("[CCF] evaluate: Mean Absolute Error:", MAE)
+        print("[CCF] evaluate: Root Mean Squared Error", RMSE)
+        print("[CCF] evaluate: sqred Root Mean Squared Error", sqreRMSE)
+
 
 if __name__ == "__main__":
-    obj_ccf = CombinedCollaborativeFiltering(10000, 10000)
-    obj_ccf.data_loader(train_file="new_ratings.csv",
-                        test_file="new_ratings.csv",
+    obj_ccf = CombinedCollaborativeFiltering(10000, 6176)
+    obj_ccf.data_loader(train_file="new_ratings_train.csv",
+                        test_file="new_ratings_test.csv",
                         embed_file="summary_embeddings",
                         embed_model_file="my_doc2vec_model",
                         books_summary_file="new_books.csv")
 
-    #obj_ccf.fit(method=1, save_file=False, matrix=2)
+    # obj_ccf.fit(method=1, save_file=True, matrix=2)
     obj_ccf.load_similarity_matrix()
-    #print(obj_ccf.item_similarity_matrix[:10, :10])
-    #print(obj_ccf.user_similarity_matrix[:10, :10])
-    print(obj_ccf.train_ratings[2, :])
-    obj_ccf.predict(0.05)
+    # print(obj_ccf.item_similarity_matrix[:10, :10])
+    # print(obj_ccf.user_similarity_matrix[:10, :10])
+    # print(obj_ccf.train_ratings[2, :])
+    # obj_ccf.predict(0.05)
+    obj_ccf.evaluate(0.0015)
+
+# k = 0.0015, 9999, 1000
+# Mean Absolute Error: 0.7062579345432203
+# Root Mean Squared Error 0.9139636235938533
+
+# no k, 9999, 1000
+# Mean Absolute Error: 0.7068023733905398
+# Root Mean Squared Error 0.9147857146439804
+
+# no k, 1000, 1000
+# Mean Absolute Error: 0.7022465276794804
+# Root Mean Squared Error 0.9111865049593912
+
