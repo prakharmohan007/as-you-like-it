@@ -4,5 +4,6 @@
 *.swap
 
 # folders
-data
 results
+report
+.idea
