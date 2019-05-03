@@ -1,9 +1,20 @@
 # These files will be ignore bu GIT
 
 # swap files
-*.swap
+*.sw*
+
+# csv file
+*.csv
+*.npy
+*model*
 
 # folders
 results
 report
 .idea
+report
+results
+goodbooks-10k
+.idea
+.ipynb*
+
